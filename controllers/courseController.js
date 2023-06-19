@@ -10,12 +10,11 @@ exports.createCourse = async (req, res) => {
             category: req.body.category,
             user: req.session.userID
         });
+        req.flash("success", `${course.name} has been created successfully`)
         res.status(201).redirect("/courses")
     } catch (error) {
-        res.status(400).json({
-            status: "fail",
-            error
-        })
+        req.flash("error", `Something Happened`)
+        res.status(400).redirect("/courses")
     }
 
 }
@@ -23,6 +22,7 @@ exports.createCourse = async (req, res) => {
 exports.getAllCourses = async (req, res) => {
     try {
         const categorySlug = req.query.categories
+        const query =req.query.search
         const category = await Category.findOne({
             slug: categorySlug
         })
@@ -32,7 +32,22 @@ exports.getAllCourses = async (req, res) => {
                 category: category._id
             }
         }
-        const courses = await Course.find(filter).sort("-createdAt")
+
+        if(query){
+            filter={name:query}
+        }
+
+        if(!query && !categorySlug) {
+            filter.name = "",
+            filter.category = null
+          }
+      
+        const courses = await Course.find({
+            $or:[
+              {name: { $regex: '.*' + filter.name + '.*', $options: 'i'}},
+              {category: filter.category}
+            ]
+          }).sort("-createdAt").populate("user")
         const categories = await Category.find()
         res.status(200).render("courses", {
             courses,
@@ -51,13 +66,15 @@ exports.getAllCourses = async (req, res) => {
 exports.getCourse = async (req, res) => {
     try {
         const user= await User.findById(req.session.userID)
+        const categories = await Category.find()
         const course = await Course.findOne({
             slug: req.params.slug
         }).populate("user")
         res.status(200).render("course", {
             course,
             page_name: "courses",
-            user
+            user,
+            categories
         })
     } catch (error) {
         res.status(400).json({
